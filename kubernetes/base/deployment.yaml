@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grayghost
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: grayghost
+  template:
+    metadata:
+      labels:
+        app: grayghost
+    spec:
+      containers:
+        - name: grayghost
+          image: grayghost:latest
+          ports:
+            - containerPort: 8501
+          env:
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: grayghost-config
+                  key: postgres_host
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: grayghost-config
+                  key: redis_host
+            - name: RABBITMQ_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: grayghost-config
+                  key: rabbitmq_host
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8501
+            initialDelaySeconds: 5
+            periodSeconds: 5

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grayghost-config
+data:
+  postgres_host: postgres
+  redis_host: redis
+  rabbitmq_host: rabbitmq
+  log_level: INFO

@@ -1,0 +1,51 @@
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disaster-recovery-config
+data:
+  recovery-regions: |
+    primary: us-west-2
+    secondary: us-east-1
+  backup-retention: "30"
+  recovery-point-objective: "24h"
+  recovery-time-objective: "4h"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: grayghost-dr-sync
+spec:
+  schedule: "0 */6 * * *"  # Run every 6 hours
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: dr-sync
+              image: grayghost:latest
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  /app/deployment/scripts/dr_sync.sh
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: aws-credentials
+                      key: access-key
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: aws-credentials
+                      key: secret-key
+              volumeMounts:
+                - name: dr-config
+                  mountPath: /etc/dr-config
+          volumes:
+            - name: dr-config
+              configMap:
+                name: disaster-recovery-config
+          restartPolicy: OnFailure
+```

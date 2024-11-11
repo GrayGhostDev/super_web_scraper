@@ -1,0 +1,86 @@
+```json
+{
+  "rules": [
+    {
+      "name": "Sensitive Personal Data",
+      "classification": "restricted",
+      "conditions": [
+        {
+          "field": "data_type",
+          "operator": "equals",
+          "value": "personal"
+        },
+        {
+          "field": "sensitivity",
+          "operator": "equals",
+          "value": "high"
+        }
+      ],
+      "retention_period": "7_years",
+      "archival_policy": "encrypt_and_archive"
+    },
+    {
+      "name": "Business Contact Data",
+      "classification": "internal",
+      "conditions": [
+        {
+          "field": "data_type",
+          "operator": "equals",
+          "value": "contact"
+        },
+        {
+          "field": "business_related",
+          "operator": "equals",
+          "value": true
+        }
+      ],
+      "retention_period": "5_years",
+      "archival_policy": "standard_archive"
+    },
+    {
+      "name": "Public Profile Data",
+      "classification": "public",
+      "conditions": [
+        {
+          "field": "data_type",
+          "operator": "equals",
+          "value": "profile"
+        },
+        {
+          "field": "visibility",
+          "operator": "equals",
+          "value": "public"
+        }
+      ],
+      "retention_period": "3_years",
+      "archival_policy": "standard_archive"
+    },
+    {
+      "name": "Temporary Cache Data",
+      "classification": "temporary",
+      "conditions": [
+        {
+          "field": "data_type",
+          "operator": "equals",
+          "value": "cache"
+        }
+      ],
+      "retention_period": "30_days",
+      "archival_policy": "delete"
+    },
+    {
+      "name": "Audit Logs",
+      "classification": "compliance",
+      "conditions": [
+        {
+          "field": "data_type",
+          "operator": "equals",
+          "value": "audit_log"
+        }
+      ],
+      "retention_period": "10_years",
+      "archival_policy": "compliance_archive"
+    }
+  ]
+}
+```

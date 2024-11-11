@@ -1,0 +1,14 @@
+groups:
+  - name: GrayGhostRecording
+    rules:
+      - record: job:api_request_duration_seconds:avg_rate5m
+        expr: rate(api_request_duration_seconds_sum[5m]) / rate(api_request_duration_seconds_count[5m])
+
+      - record: job:api_errors_ratio:rate5m
+        expr: rate(api_errors_total[5m]) / rate(api_requests_total[5m])
+
+      - record: job:task_processing_duration_seconds:avg_rate5m
+        expr: rate(task_processing_duration_seconds_sum[5m]) / rate(task_processing_duration_seconds_count[5m])
+
+      - record: job:memory_usage_percent
+        expr: memory_usage_bytes / memory_total_bytes * 100

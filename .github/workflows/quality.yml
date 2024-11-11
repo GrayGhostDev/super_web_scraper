@@ -1,0 +1,57 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [ main, staging ]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Run black
+      run: black --check src/
+
+    - name: Run isort
+      run: isort --check-only src/
+
+    - name: Run pylint
+      run: |
+        pylint src/ --output-format=parseable --reports=no > pylint-report.txt
+        score=$(sed -n 's/^Your code has been rated at \([0-9.]*\)\/.*/\1/p' pylint-report.txt)
+        if (( $(echo "$score < 8.0" | bc -l) )); then
+          echo "Pylint score below threshold: $score"
+          exit 1
+        fi
+
+    - name: Run mypy
+      run: mypy src/
+
+    - name: Check docstring coverage
+      run: |
+        interrogate src/ --fail-under 80
+
+    - name: Run radon
+      run: |
+        radon cc src/ --min C
+        radon mi src/ --min B
+
+    - name: Upload quality reports
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: quality-reports
+        path: |
+          pylint-report.txt

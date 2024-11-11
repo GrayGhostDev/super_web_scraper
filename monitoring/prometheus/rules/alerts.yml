@@ -1,0 +1,71 @@
+groups:
+  - name: GrayGhostAlerts
+    rules:
+      # API Performance Alerts
+      - alert: HighAPILatency
+        expr: rate(api_response_time_seconds_sum[5m]) / rate(api_response_time_seconds_count[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: High API latency detected
+          description: "API response time is above 1s for 5 minutes"
+          runbook_url: "https://wiki.example.com/runbooks/high-latency"
+
+      - alert: HighErrorRate
+        expr: rate(error_counts_total[5m]) / rate(api_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: High error rate detected
+          description: "Error rate is above 5% for 5 minutes"
+          runbook_url: "https://wiki.example.com/runbooks/high-error-rate"
+
+      # Task Queue Alerts
+      - alert: QueueBacklog
+        expr: task_queue_size > 1000
+        for: 15m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: Large task queue backlog
+          description: "Task queue has more than 1000 pending tasks"
+          runbook_url: "https://wiki.example.com/runbooks/queue-backlog"
+
+      - alert: TaskProcessingDelay
+        expr: rate(task_processing_duration_seconds_sum[5m]) / rate(task_processing_duration_seconds_count[5m]) > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: Task processing delays detected
+          description: "Tasks are taking more than 30s to process"
+          runbook_url: "https://wiki.example.com/runbooks/task-delays"
+
+      # Business KPI Alerts
+      - alert: LowEnrichmentRate
+        expr: rate(profiles_enriched_total[24h]) < 100
+        for: 1h
+        labels:
+          severity: warning
+          team: product
+        annotations:
+          summary: Low profile enrichment rate
+          description: "Profile enrichment rate is below target"
+          runbook_url: "https://wiki.example.com/runbooks/enrichment-rate"
+
+      - alert: LowEnrichmentSuccess
+        expr: profile_enrichment_success_rate < 0.9
+        for: 1h
+        labels:
+          severity: warning
+          team: product
+        annotations:
+          summary: Low enrichment success rate
+          description: "Profile enrichment success rate is below 90%"
+          runbook_url: "https://wiki.example.com/runbooks/enrichment-success"

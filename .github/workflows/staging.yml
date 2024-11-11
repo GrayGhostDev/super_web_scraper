@@ -1,0 +1,173 @@
+name: Staging Deployment
+
+on:
+  push:
+    branches: [ staging ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: grayghost_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Run linting
+      run: |
+        pylint src/
+        black --check src/
+        isort --check-only src/
+
+    - name: Run security scan
+      uses: snyk/actions/python@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    - name: Run tests with coverage
+      env:
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_DB: grayghost_test
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
+      run: |
+        pytest tests/ --cov=./ --cov-report=xml --junitxml=test-results.xml
+
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    - name: Check coverage threshold
+      run: |
+        coverage_percentage=$(coverage report | grep TOTAL | awk '{print $4}' | sed 's/%//')
+        if (( $(echo "$coverage_percentage < 80" | bc -l) )); then
+          echo "Coverage below threshold: $coverage_percentage%"
+          exit 1
+        fi
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+        
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+      
+    - name: Build and push Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: grayghost
+        IMAGE_TAG: staging-${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+        
+    - name: Update kustomization
+      run: |
+        cd kubernetes/overlays/staging
+        kustomize edit set image grayghost=${{ needs.build.outputs.image }}
+        
+    - name: Deploy to EKS
+      run: |
+        aws eks update-kubeconfig --name grayghost-staging
+        kubectl apply -k kubernetes/overlays/staging
+        
+    - name: Wait for rollout
+      run: |
+        kubectl rollout status deployment/grayghost -n grayghost --timeout=300s
+        
+    - name: Verify deployment
+      run: |
+        ./deployment/scripts/health_check.sh staging
+        
+    - name: Create deployment record
+      if: success()
+      run: |
+        echo "DEPLOY_ID=$(date +%s)" >> $GITHUB_ENV
+        echo "{\"id\": \"$DEPLOY_ID\", \"sha\": \"${{ github.sha }}\", \"image\": \"${{ needs.build.outputs.image }}\"}" > deployment.json
+        aws s3 cp deployment.json s3://grayghost-deployments/staging/latest.json
+
+  rollback:
+    needs: [build, deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+        
+    - name: Get previous deployment
+      run: |
+        aws s3 cp s3://grayghost-deployments/staging/latest.json previous-deployment.json
+        
+    - name: Rollback deployment
+      run: |
+        previous_image=$(jq -r '.image' previous-deployment.json)
+        cd kubernetes/overlays/staging
+        kustomize edit set image grayghost=$previous_image
+        kubectl apply -k .

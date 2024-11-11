@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: grayghost
+spec:
+  selector:
+    app: grayghost
+  ports:
+    - port: 80
+      targetPort: 8501
+  type: LoadBalancer
